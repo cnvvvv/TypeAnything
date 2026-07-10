@@ -1,0 +1,132 @@
+# TypeAnything五笔 — 86 五笔码表输入 → 按 Enter 触发 LLM 翻译/改写。
+#
+# 与拼音方案 (typeanything.schema.yaml) 共享同一条翻译链路：
+#   * typeanything_processor 排在 processors 首位 → 复用「提交→累积→Enter→改写」
+#   * typeanything: 配置块与拼音方案一致（同一份 %APPDATA%\Rime\typeanything_lang.txt /
+#     typeanything_prompts.txt 运行时文件）
+# 码表来自 rime/rime-wubi（标准 86 五笔，码表源自 ibus-table）。
+# 切换拼音↔五笔用 Rime 内置方案切换器（F4 / Ctrl+`）。
+
+schema:
+  schema_id: wubi86
+  name: TypeAnything五笔
+  version: "0.1"
+  author:
+    - TypeAnything
+  description: |
+    86 五笔码表输入，按 Enter 触发 AI 翻译/改写为目标语言或风格。
+    与拼音方案共享翻译目标（托盘「切换语言」菜单）。
+
+switches:
+  - name: ascii_mode
+    reset: 0
+    states: [ 中文, ABC ]
+  - name: simplification
+    reset: 1
+    states: [ 漢字, 汉字 ]
+
+engine:
+  processors:
+    - typeanything_processor   # ★ 必须首位 — 复用翻译链路
+    - ascii_composer
+    - recognizer
+    - key_binder
+    - speller
+    - punctuator
+    - selector
+    - navigator
+    - express_editor
+  segmentors:
+    - ascii_segmentor
+    - matcher
+    - abc_segmentor
+    - punct_segmentor
+    - fallback_segmentor
+  translators:
+    - punct_translator
+    - table_translator        # 五笔是码表驱动 → table_translator（非拼音的 script_translator）
+  filters:
+    - simplifier@simplification_filter
+    - uniquifier
+
+speller:
+  # 86 五笔使用 a–y + z（z 在 86 版为万能/学习键）。delimiter 含空格以支持词组。
+  # max_code_length 不设上限：码表已含全码，table_transulator 按 4 码自动顶屏。
+  delimiter: " ;'"
+  # max_code_length: 4   # 86 五笔最长 4 码，注释掉以兼容词组（码表驱动）
+
+translator:
+  # wubi86.dict.yaml = rime/rime-wubi 标准 86 五笔码表（text/code/weight/stem 列）。
+  dictionary: wubi86
+  prism: wubi86
+  enable_user_dict: true       # 与拼音方案一致：选词累计频次到 userdb
+  enable_charset_filter: true
+  enable_encoder: true         # 自动编码多字词组（规则在 dict header encoder.rules）
+  encode_commit_history: true
+  enable_sentence: true        # 整句候选
+  enable_completion: true      # 打不足全码也能出候选（简码）
+  sentence_over_completion: true
+  max_phrase_length: 4
+  initial_quality: 1.0
+
+simplification_filter:
+  option_name: simplification
+  opencc_config: t2s.json
+
+# Punctuation: direct single mapping. No candidate-popup ever.
+# (与拼音方案完全一致 — punctuator.cc 在 ascii_mode=false 时走 half_shape。)
+punctuator:
+  half_shape:
+    " " : " "
+    "," : "，"
+    "." : "。"
+    ";" : "；"
+    ":" : "："
+    "?" : "？"
+    "!" : "！"
+    "\\" : "、"
+    "/" : "／"
+    "(" : "（"
+    ")" : "）"
+    "[" : "「"
+    "]" : "」"
+    "{" : "『"
+    "}" : "』"
+    "<" : "《"
+    ">" : "》"
+    "@" : "@"
+    "#" : "#"
+    "$" : "￥"
+    "%" : "%"
+    "^" : "……"
+    "&" : "&"
+    "*" : "×"
+    "-" : "－"
+    "_" : "——"
+    "=" : "＝"
+    "+" : "＋"
+    "|" : "｜"
+    "`" : "·"
+    "~" : "～"
+    "'" : { pair: [ "'", "'" ] }
+    '"' : { pair: [ "“", "”" ] }
+
+key_binder:
+  import_preset: default
+
+recognizer:
+  import_preset: default
+  patterns:
+    email: "^[A-Za-z][-_.0-9A-Za-z]*@.*$"
+    uppercase: "[A-Z][-_+.'0-9A-Za-z]*$"
+    url: "^(www[.]|https?:|ftp[.:]|mailto:|file:).*$|^[a-z]+[.].+$"
+
+# AI provider config — 与拼音方案完全相同。processor 从本 schema 的
+# typeanything/ 配置块读取；运行时目标语言/提示词从共享文件读取。
+typeanything:
+  api_key: ""
+  model: deepseek-chat
+  host: api.deepseek.com
+  path: /v1/chat/completions
+  target_lang: English   # fallback when typeanything_lang.txt absent
+  temperature: 0.3

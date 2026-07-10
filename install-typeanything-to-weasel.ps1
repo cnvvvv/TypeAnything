@@ -3,7 +3,7 @@
 Install TypeAnything: custom rime.dll + Weasel UI binaries + schema + rebrand.
 
 Run from admin PowerShell:
-  cd D:\hrdai\aiForType
+  cd D:\UGit\TypeAnything
   .\install-typeanything-to-weasel.ps1 -ApiKey "sk-xxxx"
 #>
 
@@ -12,9 +12,11 @@ param(
   [string]$ApiKey,
 
   [string]$WeaselDir   = "C:\Program Files\Rime\weasel-0.17.4",
-  [string]$BuildRoot   = "D:\hrdai\aiForType\third_party\weasel",
-  [string]$OurRimeDll  = "D:\hrdai\aiForType\third_party\weasel\librime\dist\lib\rime.dll",
-  [string]$SchemaSrc   = "D:\hrdai\aiForType\third_party\weasel\librime\plugins\typeanything\schema\typeanything.schema.yaml",
+  [string]$BuildRoot   = "D:\UGit\TypeAnything\third_party\weasel",
+  [string]$OurRimeDll  = "D:\UGit\TypeAnything\third_party\weasel\librime\dist\lib\rime.dll",
+  [string]$SchemaSrc   = "D:\UGit\TypeAnything\third_party\weasel\librime\plugins\typeanything\schema\typeanything.schema.yaml",
+  [string]$WubiSchemaSrc = "D:\UGit\TypeAnything\third_party\weasel\librime\plugins\typeanything\schema\wubi86.schema.yaml",
+  [string]$WubiDictSrc   = "D:\UGit\TypeAnything\third_party\weasel\librime\plugins\typeanything\schema\wubi86.dict.yaml",
   [string]$RimeUserDir = (Join-Path $env:APPDATA "Rime"),
   [string]$TargetLang  = "English",
   # When set, look for prebuilt rime.dll/weaselx64.dll/WeaselServer.exe/
@@ -163,10 +165,13 @@ if ((Test-Path $weaselData) -and -not (Test-Path $backupDir)) {
 }
 if (Test-Path $weaselData) {
     Get-ChildItem -Path $weaselData -Filter "*.schema.yaml" -ErrorAction SilentlyContinue | ForEach-Object {
-        Remove-Item $_.FullName -Force
+        # Keep typeanything (pinyin) + wubi86 (wubi default) + luna_pinyin dep
+        if ($_.Name -notmatch '^(typeanything|wubi86|luna_pinyin)') {
+            Remove-Item $_.FullName -Force
+        }
     }
     Get-ChildItem -Path $weaselData -Filter "*.dict.yaml" -ErrorAction SilentlyContinue | ForEach-Object {
-        if ($_.Name -notmatch '^luna_pinyin') { Remove-Item $_.FullName -Force }
+        if ($_.Name -notmatch '^(luna_pinyin|typeanything|wubi86)') { Remove-Item $_.FullName -Force }
     }
 }
 
@@ -175,7 +180,7 @@ $installerDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $taExeCandidates = @(
     (Join-Path $installerDir "ta-settings.exe"),
     (Join-Path $installerDir "binaries\ta-settings.exe"),
-    "D:\hrdai\aiForType\tools\ta-settings\build\windows\x64\release\ta-settings.exe"
+    "D:\UGit\TypeAnything\tools\ta-settings\build\windows\x64\release\ta-settings.exe"
 )
 $taExeSrc = $null
 foreach ($c in $taExeCandidates) { if (Test-Path $c) { $taExeSrc = $c; break } }
@@ -212,13 +217,29 @@ $schemaContent = $schemaContent -replace 'api_key: ""', "api_key: ""$ApiKey"""
 $schemaContent = $schemaContent -replace 'target_lang: English', "target_lang: $TargetLang"
 $schemaContent | Set-Content -Path (Join-Path $RimeUserDir "typeanything.schema.yaml") -Encoding UTF8
 
+Write-Host "==> Install wubi86 schema + dict (default schema, shares translation pipeline)"
+if (Test-Path $WubiSchemaSrc) {
+    $wubiSchema = Get-Content $WubiSchemaSrc -Raw -Encoding UTF8
+    $wubiSchema = $wubiSchema -replace 'api_key: ""', "api_key: ""$ApiKey"""
+    $wubiSchema = $wubiSchema -replace 'target_lang: English', "target_lang: $TargetLang"
+    $wubiSchema | Set-Content -Path (Join-Path $RimeUserDir "wubi86.schema.yaml") -Encoding UTF8
+} else {
+    Write-Warning "    wubi86.schema.yaml not found at $WubiSchemaSrc — 五笔方案将不可用"
+}
+if (Test-Path $WubiDictSrc) {
+    Copy-Item $WubiDictSrc (Join-Path $RimeUserDir "wubi86.dict.yaml") -Force
+} else {
+    Write-Warning "    wubi86.dict.yaml not found at $WubiDictSrc — 五笔方案将无法编译"
+}
+
 # Seed default lang
 Set-Content -Path (Join-Path $RimeUserDir "typeanything_lang.txt") -Value "en" -Encoding ASCII -NoNewline
 
-Write-Host "==> Patch default.custom.yaml: only typeanything"
+Write-Host "==> Patch default.custom.yaml: wubi86 (default) + typeanything"
 $customContent = @"
 patch:
   schema_list:
+    - schema: wubi86
     - schema: typeanything
 "@
 $customContent | Set-Content -Path (Join-Path $RimeUserDir "default.custom.yaml") -Encoding UTF8
@@ -234,7 +255,7 @@ if (Test-Path $root) {
     }
 }
 
-Write-Host "==> Redeploy schema (poll until typeanything.prism.bin written)"
+Write-Host "==> Redeploy schema (poll until wubi86.prism.bin written — default schema)"
 $buildCache = Join-Path $RimeUserDir "build"
 if (Test-Path $buildCache) {
     Remove-Item -Recurse -Force $buildCache -ErrorAction SilentlyContinue
@@ -242,7 +263,7 @@ if (Test-Path $buildCache) {
 # WeaselDeployer is a GUI app: /deploy compiles the schema then enters a Win32
 # message loop and never exits on its own. Detect compile completion by polling
 # the build artifact's mtime, then force-kill the deployer immediately.
-$markerFile = Join-Path $RimeUserDir "build\typeanything.prism.bin"
+$markerFile = Join-Path $RimeUserDir "build\wubi86.prism.bin"
 $startedAt  = Get-Date
 $dep = Start-Process -WindowStyle Hidden -PassThru `
     -FilePath (Join-Path $WeaselDir "WeaselDeployer.exe") `

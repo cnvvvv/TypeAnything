@@ -18,6 +18,9 @@
 
 #define IDR_SCHEMA_YAML     3001
 #define IDR_DICT_YAML       3002
+// 五笔方案 + 码表（与拼音方案并列，F4 可切换；五笔为默认方案）
+#define IDR_WUBI_SCHEMA_YAML 3003
+#define IDR_WUBI_DICT_YAML   3004
 
 #define IDR_INSTALL_HTML    4001
 #define IDR_INSTALL_CSS     4002

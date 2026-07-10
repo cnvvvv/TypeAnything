@@ -1052,6 +1052,73 @@ static void DoInstall(InstallOptions opts) {
       }
     }
 
+    // 10b. 五笔方案 wubi86.schema.yaml（默认方案，F4 可切回拼音）。
+    //      与拼音方案结构一致：engine.processors 首位 = typeanything_processor，
+    //      带 typeanything: 配置块（同样注入 api_key + target_lang）→ 复用翻译链路。
+    if (auto [wsptr, wssz] = LoadEmbedded(MAKEINTRESOURCEW(IDR_WUBI_SCHEMA_YAML));
+        wsptr && wssz > 0) {
+      std::string wyaml((const char*)wsptr, wssz);
+      auto wreplace = [&](const std::string& needle, const std::string& with) {
+        size_t pos = wyaml.find(needle);
+        if (pos != std::string::npos) wyaml.replace(pos, needle.size(), with);
+      };
+      wreplace("api_key: \"\"", "api_key: \"" + opts.api_key + "\"");
+      wreplace("target_lang: English",
+               "target_lang: " + (opts.target_lang.empty() ? "English" : opts.target_lang));
+      std::ofstream wf(udir / L"wubi86.schema.yaml",
+                       std::ios::binary | std::ios::trunc);
+      wf.write(wyaml.data(), (std::streamsize)wyaml.size());
+    } else {
+      InstallLog("10b. write wubi86.schema.yaml",
+                 "FAIL IDR_WUBI_SCHEMA_YAML embedded resource missing");
+    }
+    {
+      std::error_code stec;
+      auto fsz = fs::file_size(udir / L"wubi86.schema.yaml", stec);
+      bool ok = !stec && fsz > 0;
+      InstallLog("10b. write wubi86.schema.yaml",
+                 std::string(ok ? "ok " : "FAIL ") + "path=" +
+                     WideToUtf8((udir / L"wubi86.schema.yaml").wstring()) +
+                     " bytes=" + (stec ? "0" : std::to_string(fsz)));
+      if (!ok) {
+        ShowFailureDialog("wubi86.schema.yaml 写入失败 — "
+                          "五笔方案将无法加载。");
+        PushStatus(78, "失败：wubi86 schema 写入失败",
+                   "wubi86.schema.yaml write failed", "error",
+                   false, "wubi86 schema yaml write failed");
+        return;
+      }
+    }
+
+    // 10c. 五笔码表 wubi86.dict.yaml（rime/rime-wubi 标准 86 五笔，136k 行）。
+    //      table_translator 按码查字，此文件是五笔方案编译的硬依赖。
+    if (auto [wdptr, wdsz] = LoadEmbedded(MAKEINTRESOURCEW(IDR_WUBI_DICT_YAML));
+        wdptr && wdsz > 0) {
+      std::ofstream wdf(udir / L"wubi86.dict.yaml",
+                        std::ios::binary | std::ios::trunc);
+      wdf.write((const char*)wdptr, (std::streamsize)wdsz);
+    } else {
+      InstallLog("10c. write wubi86.dict.yaml",
+                 "FAIL IDR_WUBI_DICT_YAML embedded resource missing");
+    }
+    {
+      std::error_code stec;
+      auto fsz = fs::file_size(udir / L"wubi86.dict.yaml", stec);
+      bool ok = !stec && fsz > 0;
+      InstallLog("10c. write wubi86.dict.yaml",
+                 std::string(ok ? "ok " : "FAIL ") + "path=" +
+                     WideToUtf8((udir / L"wubi86.dict.yaml").wstring()) +
+                     " bytes=" + (stec ? "0" : std::to_string(fsz)));
+      if (!ok) {
+        ShowFailureDialog("wubi86.dict.yaml 写入失败 — "
+                          "五笔方案将无法编译。");
+        PushStatus(78, "失败：wubi86 dict 写入失败",
+                   "wubi86.dict.yaml write failed", "error",
+                   false, "wubi86 dict yaml write failed");
+        return;
+      }
+    }
+
     // 11. Translate / classify prompts (UTF-8). Always overwrite so a
     // reinstall ships the latest prompt tuning. processor.cc + ta-settings
     // read this.
@@ -1081,6 +1148,7 @@ static void DoInstall(InstallOptions opts) {
                        std::ios::binary | std::ios::trunc);
       cf << "patch:\n"
          << "  schema_list:\n"
+         << "    - schema: wubi86\n"
          << "    - schema: typeanything\n"
          << "  \"menu/page_size\": 7\n"
          << "  app_options/winword.exe:\n    inline_preedit: false\n"
@@ -1091,27 +1159,33 @@ static void DoInstall(InstallOptions opts) {
     }
     {
       // Verify default.custom.yaml exists, has non-zero size, and the
-      // schema_list block we just wrote actually mentions typeanything
-      // (catches the case where a half-completed write or another
-      // process raced us).
+      // schema_list block contains BOTH schemas — wubi86 (default) first,
+      // then typeanything (pinyin). Catches half-completed writes / races.
       std::error_code stec;
       auto fsz = fs::file_size(udir / L"default.custom.yaml", stec);
       bool ok = !stec && fsz > 0;
-      bool schema_ok = false;
+      bool wubi_ok = false, pinyin_ok = false, wubi_first = false;
       if (ok) {
         std::ifstream rf(udir / L"default.custom.yaml", std::ios::binary);
         std::string content((std::istreambuf_iterator<char>(rf)),
                             std::istreambuf_iterator<char>());
-        schema_ok = content.find("schema: typeanything") != std::string::npos;
+        size_t wp = content.find("schema: wubi86");
+        size_t pp = content.find("schema: typeanything");
+        wubi_ok = wp != std::string::npos;
+        pinyin_ok = pp != std::string::npos;
+        // wubi86 必须排在 typeanything 之前（默认方案）
+        wubi_first = wubi_ok && pinyin_ok && wp < pp;
       }
+      bool schema_ok = wubi_ok && pinyin_ok && wubi_first;
       InstallLog("12. write default.custom.yaml",
                  std::string(ok && schema_ok ? "ok " : "FAIL ") +
                      "bytes=" + (stec ? "0" : std::to_string(fsz)) +
-                     " schema_list_pinned=" +
-                     (schema_ok ? "yes" : "NO"));
+                     " wubi86=" + (wubi_ok ? "yes" : "NO") +
+                     " pinyin=" + (pinyin_ok ? "yes" : "NO") +
+                     " wubi_first=" + (wubi_first ? "yes" : "NO"));
       if (!ok || !schema_ok) {
         ShowFailureDialog("default.custom.yaml 写入失败或未包含 "
-                          "typeanything schema_list — 输入法将加载错误方案。");
+                          "wubi86 + typeanything schema_list（五笔需排首位）。");
         PushStatus(78, "失败：default.custom.yaml 写入失败",
                    "default.custom.yaml write failed", "error", false,
                    "default.custom.yaml write failed");
@@ -1402,20 +1476,22 @@ static void DoInstall(InstallOptions opts) {
         auto name = e.path().filename().wstring();
         if (name.size() > 12 && name.substr(name.size() - 12) == L".schema.yaml"
             && name.compare(0, 11, L"luna_pinyin") != 0
-            && name.compare(0, 12, L"typeanything") != 0) {
+            && name.compare(0, 12, L"typeanything") != 0
+            && name.compare(0, 6, L"wubi86") != 0) {
           std::error_code ec; fs::remove(e.path(), ec);
           if (!ec) ++hidden;
         }
         if (name.size() > 10 && name.substr(name.size() - 10) == L".dict.yaml"
             && name.compare(0, 11, L"luna_pinyin") != 0
-            && name.compare(0, 12, L"typeanything") != 0) {
+            && name.compare(0, 12, L"typeanything") != 0
+            && name.compare(0, 6, L"wubi86") != 0) {
           std::error_code ec; fs::remove(e.path(), ec);
           if (!ec) ++hidden;
         }
       }
     }
     InstallLog("22. hide non-typeanything schemas",
-               "ok hidden=" + std::to_string(hidden));
+               "ok hidden=" + std::to_string(hidden) + " (keeps luna_pinyin/typeanything/wubi86)");
   }
 
   // 23. Redeploy schema. Original code uses StartHidden (fire-and-forget)
@@ -1446,27 +1522,33 @@ static void DoInstall(InstallOptions opts) {
     }
   }
 
-  // 24-25. Poll for typeanything.prism.bin freshness, max 60s.
-  fs::path prism = RimeUserDir() / L"build" / L"typeanything.prism.bin";
+  // 24-25. Poll for wubi86.prism.bin (default schema) freshness, max 60s.
+  //        五笔是默认方案且码表大（136k 行），编译可能比拼音慢；优先等它就绪。
+  //        typeanything.prism.bin 同一 deploy 会一起编译，不单独轮询。
+  fs::path prism = RimeUserDir() / L"build" / L"wubi86.prism.bin";
+  fs::path prism_pinyin = RimeUserDir() / L"build" / L"typeanything.prism.bin";
+  auto prism_fresh = [](const fs::path& p) -> bool {
+    if (!fs::exists(p)) return false;
+    auto ft = fs::last_write_time(p);
+    auto now = decltype(ft)::clock::now();
+    auto age = std::chrono::duration_cast<std::chrono::seconds>(now - ft).count();
+    return age < 30;
+  };
   auto start = std::chrono::steady_clock::now();
   auto last_mtime_ok = false;
   while (std::chrono::steady_clock::now() - start < std::chrono::seconds(60)) {
-    if (fs::exists(prism)) {
-      auto ft = fs::last_write_time(prism);
-      auto now = decltype(ft)::clock::now();
-      auto age = std::chrono::duration_cast<std::chrono::seconds>(now - ft).count();
-      if (age < 30) { last_mtime_ok = true; break; }
-    }
+    if (prism_fresh(prism)) { last_mtime_ok = true; break; }
     Sleep(500);
   }
   auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::steady_clock::now() - start).count();
   InstallLog("24. poll for prism.bin",
-             std::string("schema_compiled=") +
+             std::string("wubi86_compiled=") +
                  (last_mtime_ok ? "yes" : "NO") +
                  " elapsed_s=" + std::to_string(elapsed) +
-                 " path=" + WideToUtf8(prism.wstring()) +
-                 " exists=" + (fs::exists(prism) ? "yes" : "no"));
+                 " wubi86_prism=" + WideToUtf8(prism.wstring()) +
+                 " wubi86_exists=" + (fs::exists(prism) ? "yes" : "no") +
+                 " pinyin_prism_exists=" + (fs::exists(prism_pinyin) ? "yes" : "no"));
   if (!last_mtime_ok) {
     InstallLog("25. prism timeout fallback",
                "warning schema compile timed out, continuing");
