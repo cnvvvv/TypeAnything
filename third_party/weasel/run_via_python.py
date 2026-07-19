@@ -9,10 +9,10 @@ import os
 import subprocess
 import sys
 
-WEASEL = r"D:\hrdai\aiForType\third_party\weasel"
+WEASEL = r"D:\UGit\TypeAnything\third_party\weasel"
 LIBRIME = os.path.join(WEASEL, "librime")
-BOOST_ROOT = r"C:\local\boost_1_84_0"  # prebuilt binaries
-VCVARS = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+BOOST_ROOT = os.path.join(WEASEL, "deps", "boost-1.84.0")  # built via build.bat boost
+VCVARS = r"D:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
 
 clean_env = {
     "PATH": (
