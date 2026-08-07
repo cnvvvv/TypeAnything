@@ -1,5 +1,5 @@
 @echo off
-cd /d "D:\UGit\TypeAnything\third_party\weasel"
+cd /d "D:\hrdai\aiForType\third_party\weasel"
 echo PATHEXT=%PATHEXT%
 echo Try call .\env.bat:
 call .\env.bat

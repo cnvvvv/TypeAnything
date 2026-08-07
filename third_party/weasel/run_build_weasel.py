@@ -7,10 +7,10 @@ Pre-reqs:
 """
 import os, subprocess, sys, shutil
 
-WEASEL = r"D:\UGit\TypeAnything\third_party\weasel"
+WEASEL = r"D:\hrdaiiForType\third_party\weasel"
 LIBRIME_DIST = os.path.join(WEASEL, "librime", "dist")
-BOOST_ROOT = os.path.join(WEASEL, "deps", "boost-1.84.0")
-VCVARS = r"D:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+BOOST_ROOT = r"C:\local\boost_1_84_0"
+VCVARS = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
 
 # Inherit user env (msbuild needs many SpecialFolder/registry vars) but strip
 # MSYS / Git Bash entries from PATH that confuse cl.exe link.
