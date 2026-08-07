@@ -1,7 +1,7 @@
 # Build ta-settings.exe (WebView2 UI for TypeAnything tray menu items).
 
 $ErrorActionPreference = "Stop"
-Set-Location "D:\UGit\TypeAnything\tools\ta-settings"
+Set-Location $PSScriptRoot
 
 # Strip MSYS / mingw from PATH so xmake picks MSVC cl.exe
 $pathParts = $env:PATH -split ';' | Where-Object {
@@ -18,8 +18,19 @@ $env:PATH = ($pathParts -join ';')
 $env:VSINSTALLERDIR = "$vsInstaller\"
 
 # Activate VS env
+# Auto-detect vcvarsall.bat (works with Enterprise/BuildTools/Community/Professional)
+$vcvarsCandidates = @(
+    "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat",
+    "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat",
+    "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat",
+    "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvarsall.bat",
+    "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat"
+)
+$vcvars = $vcvarsCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $vcvars) { throw "vcvarsall.bat not found in any VS 2022 edition" }
+Write-Host "Using vcvars: $vcvars"
+
 $tmpEnvFile = Join-Path $env:TEMP "vcvars_env_ta.txt"
-$vcvars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
 cmd.exe /c "`"$vcvars`" x64 >nul 2>nul && set > `"$tmpEnvFile`""
 foreach ($line in (Get-Content $tmpEnvFile -Encoding Default)) {
     if ($line -match '^([^=]+)=(.*)$') {

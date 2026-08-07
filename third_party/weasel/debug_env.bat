@@ -1,5 +1,5 @@
 @echo off
-cd /d "D:\hrdai\aiForType\third_party\weasel"
+cd /d "%~dp0"
 echo Step 1: CWD=%CD%
 echo Step 2: env.bat exists?
 if exist env.bat echo YES env.bat present

@@ -1,39 +1,65 @@
-"""Build pipeline — Phase A continuation.
+"""Build pipeline - builds librime deps + librime itself.
 
 Steps:
   1. Build librime deps (glog/leveldb/marisa/opencc/yaml-cpp) via CMake
-  2. Build librime itself
+  2. Build librime itself (rime.dll)
 """
 
 import os
 import subprocess
 import sys
 
-WEASEL = r"D:\hrdai\aiForType\third_party\weasel"
+# Auto-detect paths relative to this script
+WEASEL = os.path.dirname(os.path.abspath(__file__))
 LIBRIME = os.path.join(WEASEL, "librime")
-BOOST_ROOT = r"C:\local\boost_1_84_0"  # prebuilt binaries
-VCVARS = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+BOOST_ROOT = os.environ.get("BOOST_ROOT", r"C:\local\boost_1_84_0")
+
+# Auto-detect vcvarsall.bat via vswhere
+_vswhere = os.path.join(
+    os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+    "Microsoft Visual Studio", "Installer", "vswhere.exe"
+)
+if os.path.exists(_vswhere):
+    _vsPath = subprocess.check_output(
+        [_vswhere, "-latest", "-property", "installationPath"],
+        text=True
+    ).strip()
+    VCVARS = os.path.join(_vsPath, "VC", "Auxiliary", "Build", "vcvarsall.bat")
+    VSINSTALLDIR = _vsPath + "\\"
+    VCINSTALLDIR = os.path.join(_vsPath, "VC") + "\\"
+    _cmakeNinja = os.path.join(_vsPath, "Common7", "IDE", "CommonExtensions",
+                               "Microsoft", "CMake", "Ninja")
+else:
+    VCVARS = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+    VSINSTALLDIR = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\\"
+    VCINSTALLDIR = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\\"
+    _cmakeNinja = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja"
+
+print(f"WEASEL={WEASEL}")
+print(f"BOOST_ROOT={BOOST_ROOT}")
+print(f"VCVARS={VCVARS}")
 
 clean_env = {
     "PATH": (
         r"C:\Windows\System32;C:\Windows;C:\Windows\System32\Wbem;"
-        r"C:\Program Files (x86)\Microsoft Visual Studio\Installer;"
-        r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;"
-        + os.environ["USERPROFILE"] + r"\scoop\shims"
+        + os.path.join(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+                       "Microsoft Visual Studio", "Installer") + ";"
+        + _cmakeNinja + ";"
+        + os.path.expanduser(r"~\scoop\shims")
     ),
     "SystemRoot": r"C:\Windows",
     "ComSpec": r"C:\Windows\System32\cmd.exe",
-    "USERPROFILE": os.environ.get("USERPROFILE", r"C:\Users\12395"),
-    "LOCALAPPDATA": os.environ.get("LOCALAPPDATA", r"C:\Users\12395\AppData\Local"),
-    "APPDATA": os.environ.get("APPDATA", r"C:\Users\12395\AppData\Roaming"),
+    "USERPROFILE": os.environ.get("USERPROFILE", os.path.expanduser("~")),
+    "LOCALAPPDATA": os.environ.get("LOCALAPPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Local")),
+    "APPDATA": os.environ.get("APPDATA", os.path.join(os.path.expanduser("~"), "AppData", "Roaming")),
     "TEMP": os.environ.get("TEMP", r"C:\Windows\Temp"),
     "TMP": os.environ.get("TMP", r"C:\Windows\Temp"),
-    "NUMBER_OF_PROCESSORS": "8",
+    "NUMBER_OF_PROCESSORS": os.environ.get("NUMBER_OF_PROCESSORS", "8"),
     "PROCESSOR_ARCHITECTURE": os.environ.get("PROCESSOR_ARCHITECTURE", "AMD64"),
     "BOOST_ROOT": BOOST_ROOT,
     "BOOST_LIBRARYDIR": os.path.join(BOOST_ROOT, "lib64-msvc-14.3"),
-    "VSINSTALLDIR": r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\\",
-    "VCINSTALLDIR": r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\\",
+    "VSINSTALLDIR": VSINSTALLDIR,
+    "VCINSTALLDIR": VCINSTALLDIR,
     "VisualStudioVersion": "17.0",
 }
 
@@ -90,4 +116,4 @@ if rc != 0:
     print(f"librime failed rc={rc}, see {log_rime}")
     sys.exit(rc)
 
-print("\n=== librime built. Next: add plugin + rebuild weasel ===")
+print("\n=== librime built. Next: build weasel UI ===")

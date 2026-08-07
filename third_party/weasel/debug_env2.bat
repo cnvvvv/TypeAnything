@@ -1,5 +1,5 @@
 @echo off
-cd /d "D:\hrdai\aiForType\third_party\weasel"
+cd /d "%~dp0"
 echo PATHEXT=%PATHEXT%
 echo Try call .\env.bat:
 call .\env.bat

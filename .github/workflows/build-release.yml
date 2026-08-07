@@ -1,0 +1,103 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      BOOST_VERSION: 1.84.0
+      BOOST_ROOT: ${{ github.workspace }}\third_party\weasel\deps\boost_1_84_0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: latest
+
+      - name: Cache Boost
+        id: cache-boost
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.BOOST_ROOT }}
+          key: ${{ runner.os }}-boost-1_84_0-msvc14.3-x64
+
+      - name: CI Setup (librime + boost + data)
+        shell: pwsh
+        env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\ci_setup.ps1
+
+      - name: Build librime (deps + rime.dll)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cd third_party\weasel
+          python run_via_python.py
+
+      - name: Build Weasel UI (TSF + Server + Deployer)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cd third_party\weasel
+          python run_build_weasel.py
+
+      - name: Build ta-settings
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cd tools\ta-settings
+          .\_build.ps1
+
+      - name: Build ta-installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cd tools\ta-installer
+          .\_build.ps1
+
+      - name: Verify installer artifact
+        shell: pwsh
+        run: |
+          $exe = "tools\ta-installer\build\windows\x64\release\ta-installer.exe"
+          if (Test-Path $exe) {
+            $f = Get-Item $exe
+            Write-Host "Installer: $($f.FullName) ($($f.Length) bytes)"
+          } else {
+            throw "Installer not found: $exe"
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TypeAnything-installer
+          path: tools/ta-installer/build/windows/x64/release/ta-installer.exe
+          if-no-files-found: error
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tools/ta-installer/build/windows/x64/release/ta-installer.exe
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

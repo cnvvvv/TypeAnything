@@ -2,21 +2,35 @@
 # Run before xmake build.
 
 $ErrorActionPreference = "Stop"
-$here = "D:\UGit\TypeAnything\tools\ta-installer"
+$here = $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $here)
 $embed = Join-Path $here "embed"
 
 if (Test-Path $embed) { Remove-Item -Recurse -Force $embed }
 New-Item -ItemType Directory -Force -Path $embed,"$embed\target-ui","$embed\install-ui" | Out-Null
 
-# 1. Weasel binaries
-$buildBin = "D:\UGit\TypeAnything\third_party\weasel\build\windows\x64\release"
-Copy-Item "D:\UGit\TypeAnything\third_party\weasel\librime\dist\lib\rime.dll" "$embed\rime.dll"
-Copy-Item "$buildBin\WeaselTSF\weaselx64.dll"           "$embed\weaselx64.dll"
-Copy-Item "$buildBin\WeaselServer\WeaselServer.exe"     "$embed\WeaselServer.exe"
-Copy-Item "$buildBin\WeaselDeployer\WeaselDeployer.exe" "$embed\WeaselDeployer.exe"
+# 1. Weasel binaries (check both xmake build\windows\x64\release and msbuild output\)
+$buildBin = "$repoRoot\third_party\weasel\build\windows\x64\release"
+$outputDir = "$repoRoot\third_party\weasel\output"
+Copy-Item "$repoRoot\third_party\weasel\librime\dist\lib\rime.dll" "$embed\rime.dll"
+function CopyWeaselBinary($subdir, $filename, $dstName) {
+    $xmakePath = Join-Path $buildBin "$subdir\$filename"
+    $msbuildPath = Join-Path $outputDir $filename
+    $dst = Join-Path $embed $dstName
+    if (Test-Path $xmakePath) {
+        Copy-Item $xmakePath $dst
+    } elseif (Test-Path $msbuildPath) {
+        Copy-Item $msbuildPath $dst
+    } else {
+        throw "Weasel binary not found: $filename (checked: $xmakePath, $msbuildPath)"
+    }
+}
+CopyWeaselBinary "WeaselTSF" "weaselx64.dll" "weaselx64.dll"
+CopyWeaselBinary "WeaselServer" "WeaselServer.exe" "WeaselServer.exe"
+CopyWeaselBinary "WeaselDeployer" "WeaselDeployer.exe" "WeaselDeployer.exe"
 
 # 2. ta-settings.exe + loader
-$taBin = "D:\UGit\TypeAnything\tools\ta-settings\build\windows\x64\release"
+$taBin = "$repoRoot\tools\ta-settings\build\windows\x64\release"
 Copy-Item "$taBin\ta-settings.exe"     "$embed\ta-settings.exe"
 Copy-Item "$taBin\WebView2Loader.dll"  "$embed\WebView2Loader.dll"
 
@@ -31,29 +45,32 @@ foreach ($f in "index.html","style.css","app.js","fish.png") {
 }
 
 # 5. schema yaml template + supplement dict (modern AI/IT/slang terms)
-Copy-Item "D:\UGit\TypeAnything\third_party\weasel\librime\plugins\typeanything\schema\typeanything.schema.yaml" `
+Copy-Item "$repoRoot\third_party\weasel\librime\plugins\typeanything\schema\typeanything.schema.yaml" `
           "$embed\typeanything.schema.yaml"
-Copy-Item "D:\UGit\TypeAnything\third_party\weasel\librime\plugins\typeanything\schema\typeanything.dict.yaml" `
+Copy-Item "$repoRoot\third_party\weasel\librime\plugins\typeanything\schema\typeanything.dict.yaml" `
           "$embed\typeanything.dict.yaml"
 
-# 5b. 五笔方案 + 86 码表（rime/rime-wubi）。默认方案，与拼音方案共享翻译链路。
-Copy-Item "D:\UGit\TypeAnything\third_party\weasel\librime\plugins\typeanything\schema\wubi86.schema.yaml" `
+# 5b. wubi86 schema + dict (rime/rime-wubi). Shares translation pipeline with pinyin.
+Copy-Item "$repoRoot\third_party\weasel\librime\plugins\typeanything\schema\wubi86.schema.yaml" `
           "$embed\wubi86.schema.yaml"
-Copy-Item "D:\UGit\TypeAnything\third_party\weasel\librime\plugins\typeanything\schema\wubi86.dict.yaml" `
+Copy-Item "$repoRoot\third_party\weasel\librime\plugins\typeanything\schema\wubi86.dict.yaml" `
           "$embed\wubi86.dict.yaml"
 
-# 6. Rime base data — required on cold machines (no prior Weasel install).
-#    Prefer the installed Weasel data dir (has key_bindings/punctuation that
-#    librime/data/minimal/ lacks). Fall back to minimal/ for files missing.
+# 6. Rime base data - required on cold machines (no prior Weasel install).
+#    Search order: installed Weasel > weasel build output (CI) > librime/data/minimal
 $pfData = "C:\Program Files\Rime\weasel-0.17.4\data"
-$minData = "D:\UGit\TypeAnything\third_party\weasel\librime\data\minimal"
+$weaselData = "$repoRoot\third_party\weasel\output\data"
+$minData = "$repoRoot\third_party\weasel\librime\data\minimal"
 function StageDataFile($name) {
-    $pf  = Join-Path $pfData $name
-    $min = Join-Path $minData $name
     $dst = Join-Path $embed $name
-    if (Test-Path $pf)        { Copy-Item $pf  $dst }
-    elseif (Test-Path $min)   { Copy-Item $min $dst }
-    else                      { throw "data file not found: $name" }
+    foreach ($src in @(
+        (Join-Path $pfData $name),
+        (Join-Path $weaselData $name),
+        (Join-Path $minData $name)
+    )) {
+        if (Test-Path $src) { Copy-Item $src $dst; return }
+    }
+    throw "data file not found: $name (checked: $pfData, $weaselData, $minData)"
 }
 StageDataFile "default.yaml"
 StageDataFile "luna_pinyin.dict.yaml"
@@ -62,30 +79,42 @@ StageDataFile "essay.txt"
 StageDataFile "symbols.yaml"
 StageDataFile "punctuation.yaml"
 StageDataFile "key_bindings.yaml"
-# weasel.yaml — base panel/style template. Without this on a cold machine,
+# weasel.yaml - base panel/style template. Without this on a cold machine,
 # WeaselDeployer cannot produce build\weasel.yaml and the candidate window
 # renders at ~0px on high-DPI screens (issue #14).
 StageDataFile "weasel.yaml"
 
-# 6b. OpenCC data — required by the schema's simplifier@simplification_filter
+# 6b. OpenCC data - required by the schema's simplifier@simplification_filter
 #     (opencc_config: t2s.json). Without these the simplifier fails to load,
 #     traditional luna_pinyin output passes through unconverted AND the
-#     candidate generation chain errors out → empty candidate window.
-#     Only the t2s (繁→简) chain is needed: t2s.json + TSPhrases + TSCharacters.
-$opencc = Join-Path $pfData "opencc"
+#     candidate generation chain errors out -> empty candidate window.
+#     Only the t2s (trad->simp) chain is needed: t2s.json + TSPhrases + TSCharacters.
+#     Search order: installed Weasel opencc > weasel build output opencc > librime share opencc
 $openccDst = Join-Path $embed "opencc"
 New-Item -ItemType Directory -Force -Path $openccDst | Out-Null
+$openccSources = @(
+    (Join-Path $pfData "opencc"),
+    (Join-Path $weaselData "opencc"),
+    "$repoRoot\third_party\weasel\librime\share\opencc"
+)
 foreach ($f in "t2s.json","TSPhrases.ocd2","TSCharacters.ocd2") {
-    $srcF = Join-Path $opencc $f
-    if (-not (Test-Path $srcF)) { throw "OpenCC data missing: $srcF (install official 小狼毫 once to get opencc/)" }
-    Copy-Item $srcF (Join-Path $openccDst $f)
+    $found = $false
+    foreach ($srcDir in $openccSources) {
+        $srcF = Join-Path $srcDir $f
+        if (Test-Path $srcF) {
+            Copy-Item $srcF (Join-Path $openccDst $f)
+            $found = $true
+            break
+        }
+    }
+    if (-not $found) { throw "OpenCC data missing: $f (checked: $($openccSources -join ', '))" }
 }
 
 # 7. Translate / classify prompts (UTF-8). Source of truth = embed_prompts.txt
 #    (generated from tools/eval/run_eval.py validated prompts).
 Copy-Item "$here\embed_prompts.txt" "$embed\typeanything_prompts.txt"
 
-# Compile installer.rc → .res → .obj (real COFF) so xmake link picks it up
+# Compile installer.rc -> .res -> .obj (real COFF) so xmake link picks it up
 # as a normal object file. xmake's built-in RC handling outputs RES format
 # but under a .obj name, which link.exe silently drops.
 $rcExe = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory -ErrorAction SilentlyContinue |
@@ -93,11 +122,26 @@ $rcExe = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory -
              $candidate = Join-Path $_.FullName "x64\rc.exe"
              if (Test-Path $candidate) { return $candidate }
          } | Select-Object -First 1
-$cvtres = Get-ChildItem "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC" -Directory -ErrorAction SilentlyContinue |
-          Sort-Object Name -Descending | ForEach-Object {
-              $candidate = Join-Path $_.FullName "bin\HostX64\x64\cvtres.exe"
-              if (Test-Path $candidate) { return $candidate }
-          } | Select-Object -First 1
+$vsDirs = @(
+    "C:\Program Files\Microsoft Visual Studio\2022\Enterprise",
+    "C:\Program Files\Microsoft Visual Studio\2022\Community",
+    "C:\Program Files\Microsoft Visual Studio\2022\Professional",
+    "C:\Program Files\Microsoft Visual Studio\2022\BuildTools",
+    "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools",
+    "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise"
+)
+$cvtres = $null
+foreach ($vsDir in $vsDirs) {
+    $msvcDir = Join-Path $vsDir "VC\Tools\MSVC"
+    if (Test-Path $msvcDir) {
+        $cvtres = Get-ChildItem $msvcDir -Directory -ErrorAction SilentlyContinue |
+                  Sort-Object Name -Descending | ForEach-Object {
+                      $candidate = Join-Path $_.FullName "bin\HostX64\x64\cvtres.exe"
+                      if (Test-Path $candidate) { return $candidate }
+                  } | Select-Object -First 1
+        if ($cvtres) { break }
+    }
+}
 
 if (-not $rcExe)   { throw "rc.exe not found (need Windows SDK)" }
 if (-not $cvtres)  { throw "cvtres.exe not found (need VS2022 BuildTools)" }

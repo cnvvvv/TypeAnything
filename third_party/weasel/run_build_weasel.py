@@ -2,39 +2,63 @@
 
 Pre-reqs:
   - librime already built (rime.dll in librime/dist/lib/)
-  - boost prebuilt at C:\\local\\boost_1_84_0
+  - boost prebuilt (set BOOST_ROOT env var, or default C:\\local\\boost_1_84_0)
   - source files patched with TypeAnything branding
 """
 import os, subprocess, sys, shutil
 
-WEASEL = r"D:\hrdaiiForType\third_party\weasel"
+# Auto-detect paths relative to this script
+WEASEL = os.path.dirname(os.path.abspath(__file__))
 LIBRIME_DIST = os.path.join(WEASEL, "librime", "dist")
-BOOST_ROOT = r"C:\local\boost_1_84_0"
-VCVARS = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+BOOST_ROOT = os.environ.get("BOOST_ROOT", r"C:\local\boost_1_84_0")
+
+# Auto-detect vcvarsall.bat via vswhere
+_vswhere = os.path.join(
+    os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+    "Microsoft Visual Studio", "Installer", "vswhere.exe"
+)
+if os.path.exists(_vswhere):
+    _vsPath = subprocess.check_output(
+        [_vswhere, "-latest", "-property", "installationPath"],
+        text=True
+    ).strip()
+    VCVARS = os.path.join(_vsPath, "VC", "Auxiliary", "Build", "vcvarsall.bat")
+    VSINSTALLDIR = _vsPath + "\\"
+    VCINSTALLDIR = os.path.join(_vsPath, "VC") + "\\"
+    _cmakeNinja = os.path.join(_vsPath, "Common7", "IDE", "CommonExtensions",
+                               "Microsoft", "CMake", "Ninja")
+else:
+    VCVARS = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+    VSINSTALLDIR = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\\"
+    VCINSTALLDIR = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\\"
+    _cmakeNinja = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja"
+
+print(f"WEASEL={WEASEL}")
+print(f"BOOST_ROOT={BOOST_ROOT}")
+print(f"VCVARS={VCVARS}")
 
 # Inherit user env (msbuild needs many SpecialFolder/registry vars) but strip
 # MSYS / Git Bash entries from PATH that confuse cl.exe link.
 def _build_env():
     e = dict(os.environ)
-    # Strip MSYS Git's bin entries (they shadow link.exe etc.)
     raw = e.get("PATH", "")
     keep = []
     for part in raw.split(";"):
         low = part.lower()
-        if any(x in low for x in (r"\git\mingw", r"\git\usr", r"git\bin", r"\msys", r"\anaconda3\library\mingw", r"\anaconda3\library\usr")):
+        if any(x in low for x in (r"\git\mingw", r"\git\usr", "git\\bin", r"\msys", r"\anaconda3\library\mingw", r"\anaconda3\library\usr")):
             continue
         keep.append(part)
-    # Prepend our build tool dirs
     prepend = [
-        r"C:\Program Files (x86)\Microsoft Visual Studio\Installer",
-        r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja",
+        os.path.join(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+                     "Microsoft Visual Studio", "Installer"),
+        _cmakeNinja,
         os.path.expanduser(r"~\scoop\shims"),
     ]
     e["PATH"] = ";".join(prepend + keep)
     e["BOOST_ROOT"] = BOOST_ROOT
     e["BOOST_LIBRARYDIR"] = os.path.join(BOOST_ROOT, "lib64-msvc-14.3")
-    e["VSINSTALLDIR"] = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\\"
-    e["VCINSTALLDIR"] = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\\"
+    e["VSINSTALLDIR"] = VSINSTALLDIR
+    e["VCINSTALLDIR"] = VCINSTALLDIR
     e["VisualStudioVersion"] = "17.0"
     e["NUMBER_OF_PROCESSORS"] = e.get("NUMBER_OF_PROCESSORS", "8")
     return e
@@ -64,9 +88,6 @@ def run_bat(label, script, cwd, log_path):
 
 
 # librime lib + dll need to be where Weasel's projects expect them:
-#   weasel/output/  (rime.dll, bin)
-#   weasel/lib64/   (rime.lib for x64)
-#   weasel/lib/     (rime.lib for x86 — we don't have x86; symlink x64 copy)
 output = os.path.join(WEASEL, "output")
 lib64 = os.path.join(WEASEL, "lib64")
 os.makedirs(output, exist_ok=True)

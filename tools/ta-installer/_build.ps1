@@ -6,7 +6,7 @@
 #   3. Output: build\windows\x64\release\ta-installer.exe.
 
 $ErrorActionPreference = "Stop"
-Set-Location "D:\UGit\TypeAnything\tools\ta-installer"
+Set-Location $PSScriptRoot
 
 & "$PSScriptRoot\_stage_embed.ps1"
 
@@ -25,8 +25,19 @@ $env:PATH = ($pathParts -join ';')
 $env:VSINSTALLERDIR = "$vsInstaller\"
 
 # VS dev env
+# Auto-detect vcvarsall.bat (works with Enterprise/BuildTools/Community/Professional)
+$vcvarsCandidates = @(
+    "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat",
+    "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat",
+    "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat",
+    "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvarsall.bat",
+    "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat"
+)
+$vcvars = $vcvarsCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $vcvars) { throw "vcvarsall.bat not found in any VS 2022 edition" }
+Write-Host "Using vcvars: $vcvars"
+
 $tmp = Join-Path $env:TEMP "vcvars_env_inst.txt"
-$vcvars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
 cmd.exe /c "`"$vcvars`" x64 >nul 2>nul && set > `"$tmp`""
 foreach ($line in (Get-Content $tmp -Encoding Default)) {
     if ($line -match '^([^=]+)=(.*)$') {
