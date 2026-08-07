@@ -2,7 +2,7 @@
 # Runs on GitHub Actions windows-2022 runner.
 # Steps:
 #   1. Clone librime (preserving tracked plugin files)
-#   2. Download prebuilt Boost 1.84.0 (MSVC 14.3 x64)
+#   2. Download/build Boost 1.84.0 (MSVC 14.3 x64)
 #   3. Create missing data files (typeanything.dict.yaml, weasel.yaml)
 #   4. Fetch Rime base data via plum/rime-install
 
@@ -28,25 +28,72 @@ if (-not (Test-Path (Join-Path $librimeDir "build.bat"))) {
     Write-Host "[1/4] librime already present"
 }
 
-# ── 2. Download prebuilt Boost 1.84.0 ──
+# ── 2. Download/build Boost 1.84.0 ──
 $boostVer = "1_84_0"
 $boostDir = Join-Path $weasel "deps\boost_$boostVer"
 $boostRoot = $boostDir
 if (-not (Test-Path (Join-Path $boostDir "boost"))) {
-    Write-Host "[2/4] Downloading Boost 1.84.0 prebuilt (MSVC 14.3 x64)..."
-    New-Item -ItemType Directory -Force -Path (Split-Path $boostDir) | Out-Null
-    $url = "https://archives.boost.io/release/1.84.0/binaries/1.84.0/boost_${boostVer}-msvc-14.3-64.exe"
-    $exePath = Join-Path $env:TEMP "boost_${boostVer}-msvc-14.3-64.exe"
-    Invoke-WebRequest $url -OutFile $exePath -UseBasicParsing
-    # Self-extracting 7z — extract with 7z
-    & 7z x $exePath -o"$boostDir" -y | Out-Null
-    Remove-Item $exePath -ErrorAction SilentlyContinue
-    Write-Host "  Boost extracted to $boostDir"
+    Write-Host "[2/4] Setting up Boost 1.84.0..."
+
+    # Method A: Try prebuilt binaries from SourceForge
+    $prebuiltOk = $false
+    try {
+        Write-Host "  Trying prebuilt from SourceForge..."
+        New-Item -ItemType Directory -Force -Path (Split-Path $boostDir) | Out-Null
+        $url = "https://sourceforge.net/projects/boost/files/boost-binaries/1.84.0/boost_${boostVer}-msvc-14.3-64.exe/download"
+        $exePath = Join-Path $env:TEMP "boost_${boostVer}-msvc-14.3-64.exe"
+        Invoke-WebRequest $url -OutFile $exePath -UseBasicParsing -MaximumRedirection 10
+        & 7z x $exePath -o"$boostDir" -y | Out-Null
+        Remove-Item $exePath -ErrorAction SilentlyContinue
+        if (Test-Path (Join-Path $boostDir "boost")) {
+            $prebuiltOk = $true
+            Write-Host "  Boost prebuilt extracted to $boostDir"
+        }
+    } catch {
+        Write-Host "  Prebuilt download failed: $($_.Exception.Message)"
+    }
+
+    # Method B: Build from source (fallback — slow but reliable)
+    if (-not $prebuiltOk) {
+        Write-Host "  Building Boost from source..."
+        Push-Location $weasel
+        $env:BOOST_ROOT = $boostRoot
+        # Download source
+        $srcUrl = "https://archives.boost.io/release/1.84.0/source/boost_${boostVer}.7z"
+        $srcArchive = Join-Path $env:TEMP "boost_${boostVer}.7z"
+        Invoke-WebRequest $srcUrl -OutFile $srcArchive -UseBasicParsing
+        New-Item -ItemType Directory -Force -Path (Split-Path $boostDir) | Out-Null
+        & 7z x $srcArchive -o"$boostDir\.." -y | Out-Null
+        Remove-Item $srcArchive -ErrorAction SilentlyContinue
+
+        # Build with b2
+        Push-Location $boostDir
+        # Activate VS env
+        $vswhere = Join-Path $env:ProgramFilesx86 "Microsoft Visual Studio\Installer\vswhere.exe"
+        if (-not (Test-Path $vswhere)) { $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" }
+        $vsPath = & $vswhere -latest -property installationPath
+        $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
+        $tmpEnv = Join-Path $env:TEMP "boost_vs_env.txt"
+        & cmd /c "`"$vcvars`" x64 >nul 2>nul && set > `"$tmpEnv`""
+        foreach ($line in (Get-Content $tmpEnv -Encoding Default)) {
+            if ($line -match '^([^=]+)=(.*)$') { Set-Item -Path "env:$($Matches[1])" -Value $Matches[2] }
+        }
+        & .\bootstrap.bat
+        & .\b2 -j$env:NUMBER_OF_PROCESSORS --with-filesystem --with-json --with-locale --with-regex --with-serialization --with-system --with-thread toolset=msvc-14.3 link=static runtime-link=static address-model=64 stage
+        Pop-Location
+        Pop-Location
+        Write-Host "  Boost built from source at $boostDir"
+    }
 } else {
     Write-Host "[2/4] Boost already present at $boostDir"
 }
 $env:BOOST_ROOT = $boostRoot
 $env:BOOST_LIBRARYDIR = Join-Path $boostRoot "lib64-msvc-14.3"
+# Export to GitHub Actions env for subsequent steps
+if ($env:GITHUB_ENV) {
+    Add-Content -Path $env:GITHUB_ENV -Value "BOOST_ROOT=$boostRoot"
+    Add-Content -Path $env:GITHUB_ENV -Value "BOOST_LIBRARYDIR=$($env:BOOST_LIBRARYDIR)"
+}
 Write-Host "  BOOST_ROOT=$env:BOOST_ROOT"
 Write-Host "  BOOST_LIBRARYDIR=$env:BOOST_LIBRARYDIR"
 
