@@ -88,6 +88,20 @@ def run_bat(label, script, cwd, log_path):
     return proc.returncode
 
 
+# Write a custom env.bat so librime build.bat uses VS 2022 instead of the
+# upstream template defaults (VS 2019 / Win32 / v142).
+env_bat = os.path.join(LIBRIME, "env.bat")
+env_bat_content = f'''set RIME_ROOT=%CD%
+if not defined BOOST_ROOT set BOOST_ROOT={BOOST_ROOT}
+set ARCH=x64
+set BJAM_TOOLSET=msvc-14.3
+set CMAKE_GENERATOR="Visual Studio 17 2022"
+set PLATFORM_TOOLSET=v143
+'''
+with open(env_bat, "w", encoding="ascii", newline="\r\n") as f:
+    f.write(env_bat_content)
+print(f"Wrote custom env.bat: {env_bat}")
+
 # Step 1: librime deps (glog, leveldb, marisa, opencc, yaml-cpp)
 log_deps = os.path.join(WEASEL, "_log_librime_deps.txt")
 deps_script = f'''@echo off
@@ -95,9 +109,6 @@ call "{VCVARS}" x64
 cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
 set BOOST_LIBRARYDIR={BOOST_LIBDIR}
-set CMAKE_GENERATOR=Visual Studio 17 2022
-set ARCH=x64
-set PLATFORM_TOOLSET=v143
 call .\\build.bat deps
 '''
 rc = run_bat("librime deps", deps_script, LIBRIME, log_deps)
@@ -122,9 +133,6 @@ call "{VCVARS}" x64
 cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
 set BOOST_LIBRARYDIR={BOOST_LIBDIR}
-set CMAKE_GENERATOR=Visual Studio 17 2022
-set ARCH=x64
-set PLATFORM_TOOLSET=v143
 call .\\build.bat librime
 '''
 rc = run_bat("librime", rime_script, LIBRIME, log_rime)
