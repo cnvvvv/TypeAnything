@@ -87,8 +87,11 @@ def run_bat(label, script, cwd, log_path):
     return proc.returncode
 
 
-# Write a custom env.bat so librime build.bat uses VS 2022 instead of the
-# upstream template defaults (VS 2019 / Win32 / v142).
+# Write a custom env.bat. We use the Ninja generator (same as upstream
+# rime/librime's own Windows CI): it relies on the MSVC env set up by
+# vcvarsall below and does NOT need Visual Studio instance discovery,
+# which fails on CI runners ("could not find any instance of Visual
+# Studio"). ARCH / PLATFORM_TOOLSET must stay unset: Ninja rejects -A/-T.
 env_bat = os.path.join(LIBRIME, "env.bat")
 env_bat_content = f'''set RIME_ROOT=%CD%
 if not defined BOOST_ROOT set BOOST_ROOT={BOOST_ROOT}
@@ -119,6 +122,12 @@ cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
 set BOOST_LIBRARYDIR={BOOST_LIBDIR}
 cmake --version
+echo ==== DIAG ninja ====
+ninja --version
+echo ==== DIAG env ====
+echo VSINSTALLDIR=%VSINSTALLDIR%
+echo CMAKE_GENERATOR=%CMAKE_GENERATOR%
+echo ==== DIAG END ====
 call .\\build.bat deps
 '''
 rc = run_bat("librime deps", deps_script, LIBRIME, log_deps)
