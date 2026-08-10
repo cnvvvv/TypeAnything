@@ -12,12 +12,23 @@ Write-Host "=== ci_setup: repoRoot=$repoRoot ==="
 $librimeDir = Join-Path $weasel "librime"
 $tempDir = Join-Path $weasel "librime_src"
 if (-not (Test-Path (Join-Path $librimeDir "build.bat"))) {
-    Write-Host "[1/4] Cloning librime..."
+    Write-Host "[1/4] Cloning librime (with submodules)..."
     git clone --depth 1 https://github.com/rime/librime.git $tempDir
+    if ($LASTEXITCODE -ne 0) { throw "git clone librime failed" }
+    # Initialize submodules (deps/glog, deps/leveldb, deps/marisa-trie, etc.)
+    Push-Location $tempDir
+    git submodule update --init --depth 1 deps/glog
+    git submodule update --init --depth 1 deps/googletest
+    git submodule update --init --depth 1 deps/leveldb
+    git submodule update --init --depth 1 deps/marisa-trie
+    git submodule update --init --depth 1 deps/opencc
+    git submodule update --init --depth 1 deps/yaml-cpp
+    Pop-Location
+    # Copy everything except .git and plugins (keep our own plugins)
     robocopy $tempDir $librimeDir /E /XD .git plugins /XF .gitignore /NFL /NDL /NJH /NJS /NC /NS /NP
     if ($LASTEXITCODE -ge 8) { throw "robocopy failed" }
     Remove-Item -Recurse -Force $tempDir
-    Write-Host "  librime cloned"
+    Write-Host "  librime cloned (with deps submodules)"
 } else {
     Write-Host "[1/4] librime already present"
 }
