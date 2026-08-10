@@ -109,6 +109,15 @@ set CMAKE_GENERATOR_INSTANCE={VSINSTALL}
 cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
 set BOOST_LIBRARYDIR={BOOST_LIBDIR}
+echo ==== DIAG cmake ====
+cmake --version
+echo ==== DIAG vswhere ====
+"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+echo ==== DIAG env ====
+echo VSINSTALLDIR=%VSINSTALLDIR%
+echo VCINSTALLDIR=%VCINSTALLDIR%
+echo CMAKE_GENERATOR_INSTANCE=%CMAKE_GENERATOR_INSTANCE%
+echo ==== DIAG END ====
 call .\\build.bat deps
 '''
 rc = run_bat("librime deps", deps_script, LIBRIME, log_deps)
