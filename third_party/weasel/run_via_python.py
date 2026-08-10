@@ -36,10 +36,12 @@ else:
     VCINSTALLDIR = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\\"
     _cmakeNinja = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja"
 
+VSINSTALL = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.normpath(VCVARS)))))
 print(f"WEASEL={WEASEL}")
 print(f"BOOST_ROOT={BOOST_ROOT}")
 print(f"BOOST_LIBRARYDIR={BOOST_LIBDIR}")
 print(f"VCVARS={VCVARS}")
+print(f"VSINSTALL={VSINSTALL}")
 
 clean_env = {
     "PATH": (
@@ -62,9 +64,6 @@ clean_env = {
     "PROCESSOR_ARCHITECTURE": os.environ.get("PROCESSOR_ARCHITECTURE", "AMD64"),
     "BOOST_ROOT": BOOST_ROOT,
     "BOOST_LIBRARYDIR": os.environ.get("BOOST_LIBRARYDIR", os.path.join(BOOST_ROOT, "lib64-msvc-14.3")),
-    "VSINSTALLDIR": VSINSTALLDIR,
-    "VCINSTALLDIR": VCINSTALLDIR,
-    "VisualStudioVersion": "17.0",
 }
 
 
@@ -106,6 +105,7 @@ print(f"Wrote custom env.bat: {env_bat}")
 log_deps = os.path.join(WEASEL, "_log_librime_deps.txt")
 deps_script = f'''@echo off
 call "{VCVARS}" x64
+set CMAKE_GENERATOR_INSTANCE={VSINSTALL}
 cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
 set BOOST_LIBRARYDIR={BOOST_LIBDIR}
@@ -130,6 +130,7 @@ if rc != 0:
 log_rime = os.path.join(WEASEL, "_log_librime.txt")
 rime_script = f'''@echo off
 call "{VCVARS}" x64
+set CMAKE_GENERATOR_INSTANCE={VSINSTALL}
 cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
 set BOOST_LIBRARYDIR={BOOST_LIBDIR}
