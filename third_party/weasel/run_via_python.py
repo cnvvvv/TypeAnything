@@ -47,6 +47,8 @@ clean_env = {
         + os.path.join(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
                        "Microsoft Visual Studio", "Installer") + ";"
         + _cmakeNinja + ";"
+        + r"C:\Program Files\Git\cmd" + ";"
+        + r"C:\Program Files\CMake\bin" + ";"
         + os.path.expanduser(r"~\scoop\shims")
     ),
     "SystemRoot": r"C:\Windows",
@@ -101,6 +103,16 @@ call .\\build.bat deps
 rc = run_bat("librime deps", deps_script, LIBRIME, log_deps)
 if rc != 0:
     print(f"deps failed rc={rc}, see {log_deps}")
+    # Print last 80 lines of log for CI debugging
+    try:
+        with open(log_deps, "rb") as f:
+            text = f.read().decode("utf-8", errors="replace")
+        lines = text.strip().split("\n")
+        print("--- deps log (last 80 lines) ---")
+        for line in lines[-80:]:
+            print("  " + line.rstrip())
+    except Exception as e:
+        print(f"  Could not read log: {e}")
     sys.exit(rc)
 
 # Step 2: librime itself (rime.dll)
@@ -118,6 +130,15 @@ call .\\build.bat librime
 rc = run_bat("librime", rime_script, LIBRIME, log_rime)
 if rc != 0:
     print(f"librime failed rc={rc}, see {log_rime}")
+    try:
+        with open(log_rime, "rb") as f:
+            text = f.read().decode("utf-8", errors="replace")
+        lines = text.strip().split("\n")
+        print("--- librime log (last 80 lines) ---")
+        for line in lines[-80:]:
+            print("  " + line.rstrip())
+    except Exception as e:
+        print(f"  Could not read log: {e}")
     sys.exit(rc)
 
 print("\n=== librime built. Next: build weasel UI ===")
