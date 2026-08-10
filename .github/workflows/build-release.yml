@@ -52,6 +52,38 @@ jobs:
           cd third_party\weasel
           python run_via_python.py
 
+      - name: Publish librime build diagnostics
+        if: failure()
+        shell: pwsh
+        run: |
+          # Dump librime build logs + env into GITHUB_STEP_SUMMARY so the
+          # failure reason is readable via the public check-run API without
+          # needing admin log access.
+          $files = @(
+            'third_party\weasel\_log_librime_deps.txt',
+            'third_party\weasel\_log_librime.txt'
+          )
+          $sb = [System.Text.StringBuilder]::new()
+          foreach ($f in $files) {
+            [void]$sb.AppendLine("## $f")
+            if (Test-Path $f) {
+              $lines = @(Get-Content $f -ErrorAction SilentlyContinue)
+              $lines = $lines | Select-Object -Last 200
+              [void]$sb.AppendLine(($lines -join "`n"))
+            } else {
+              [void]$sb.AppendLine("(file not found)")
+            }
+          }
+          [void]$sb.AppendLine("## librime/env.bat")
+          $envBat = 'third_party\weasel\librime\env.bat'
+          if (Test-Path $envBat) {
+            [void]$sb.AppendLine((Get-Content $envBat -Raw))
+          } else {
+            [void]$sb.AppendLine("(env.bat not found)")
+          }
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $sb.ToString()
+          Write-Host "librime diagnostics published to step summary"
+
       - name: Build Weasel UI (TSF + Server + Deployer)
         shell: pwsh
         run: |

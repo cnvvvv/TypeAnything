@@ -94,17 +94,30 @@ env_bat_content = f'''set RIME_ROOT=%CD%
 if not defined BOOST_ROOT set BOOST_ROOT={BOOST_ROOT}
 set ARCH=x64
 set BJAM_TOOLSET=msvc-14.3
-set CMAKE_GENERATOR="Visual Studio 17 2022"
+set CMAKE_GENERATOR=Visual Studio 17 2022
 set PLATFORM_TOOLSET=v143
 '''
 with open(env_bat, "w", encoding="ascii", newline="\r\n") as f:
     f.write(env_bat_content)
 print(f"Wrote custom env.bat: {env_bat}")
 
+# Patch librime/build.bat so the -G flag is quoted (avoids cmd arg splitting).
+build_bat_path = os.path.join(LIBRIME, "build.bat")
+with open(build_bat_path, "r", encoding="utf-8", errors="replace") as f:
+    bb = f.read()
+patched = bb.replace("-G%CMAKE_GENERATOR%", "-G\"%CMAKE_GENERATOR%\"")
+if patched != bb:
+    with open(build_bat_path, "w", encoding="utf-8", newline="\r\n") as f:
+        f.write(patched)
+    print("Patched librime/build.bat: -G now quoted")
+else:
+    print("build.bat already patched or pattern missing")
+
 # Step 1: librime deps (glog, leveldb, marisa, opencc, yaml-cpp)
 log_deps = os.path.join(WEASEL, "_log_librime_deps.txt")
 deps_script = f'''@echo off
 call "{VCVARS}" x64
+set CMAKE_GENERATOR=Visual Studio 17 2022
 set CMAKE_GENERATOR_INSTANCE={VSINSTALL}
 cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
@@ -139,6 +152,7 @@ if rc != 0:
 log_rime = os.path.join(WEASEL, "_log_librime.txt")
 rime_script = f'''@echo off
 call "{VCVARS}" x64
+set CMAKE_GENERATOR=Visual Studio 17 2022
 set CMAKE_GENERATOR_INSTANCE={VSINSTALL}
 cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
