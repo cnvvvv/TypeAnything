@@ -56,25 +56,24 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          # Dump librime build logs + env into GITHUB_STEP_SUMMARY so the
-          # failure reason is readable via the public check-run API without
-          # needing admin log access.
+          # Emit librime build logs as a check annotation (publicly readable
+          # via the check-runs annotations API) + write step summary.
           $files = @(
             'third_party\weasel\_log_librime_deps.txt',
             'third_party\weasel\_log_librime.txt'
           )
           $sb = [System.Text.StringBuilder]::new()
           foreach ($f in $files) {
-            [void]$sb.AppendLine("## $f")
+            [void]$sb.AppendLine("===== $f =====")
             if (Test-Path $f) {
               $lines = @(Get-Content $f -ErrorAction SilentlyContinue)
-              $lines = $lines | Select-Object -Last 200
+              $lines = $lines | Select-Object -Last 250
               [void]$sb.AppendLine(($lines -join "`n"))
             } else {
               [void]$sb.AppendLine("(file not found)")
             }
           }
-          [void]$sb.AppendLine("## librime/env.bat")
+          [void]$sb.AppendLine("===== librime/env.bat =====")
           $envBat = 'third_party\weasel\librime\env.bat'
           if (Test-Path $envBat) {
             [void]$sb.AppendLine((Get-Content $envBat -Raw))
@@ -82,7 +81,22 @@ jobs:
             [void]$sb.AppendLine("(env.bat not found)")
           }
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $sb.ToString()
-          Write-Host "librime diagnostics published to step summary"
+          $msg = $sb.ToString()
+          if ($msg.Length -gt 60000) { $msg = $msg.Substring($msg.Length - 60000) }
+          $escaped = $msg -replace '%', '%25' -replace "`r", '%0D' -replace "`n", '%0A'
+          Write-Output "::error title=librime build diagnostics::$escaped"
+          Write-Host "librime diagnostics published as annotation"
+
+      - name: Upload librime diagnostics artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: librime-build-diagnostics
+          path: |
+            third_party/weasel/_log_librime_deps.txt
+            third_party/weasel/_log_librime.txt
+            third_party/weasel/librime/env.bat
+          if-no-files-found: ignore
 
       - name: Build Weasel UI (TSF + Server + Deployer)
         shell: pwsh
