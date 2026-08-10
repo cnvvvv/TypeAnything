@@ -66,8 +66,16 @@ jobs:
           foreach ($f in $files) {
             [void]$sb.AppendLine("===== $f =====")
             if (Test-Path $f) {
+              $fi = Get-Item $f
+              [void]$sb.AppendLine("(size: $($fi.Length) bytes)")
+              $errLines = @(Select-String -Path $f -Pattern 'error|fatal|FAILED|LNK[0-9]{4}|C[0-9]{4}|undefined' -ErrorAction SilentlyContinue | Select-Object -Last 25 | ForEach-Object { $_.Line })
+              if ($errLines.Count -gt 0) {
+                [void]$sb.AppendLine("--- error lines ---")
+                [void]$sb.AppendLine(($errLines -join "`n"))
+              }
               $lines = @(Get-Content $f -ErrorAction SilentlyContinue)
-              $lines = $lines | Select-Object -Last 250
+              $lines = $lines | Select-Object -Last 150
+              [void]$sb.AppendLine("--- last lines ---")
               [void]$sb.AppendLine(($lines -join "`n"))
             } else {
               [void]$sb.AppendLine("(file not found)")

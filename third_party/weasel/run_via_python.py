@@ -61,6 +61,10 @@ clean_env = {
     "TEMP": os.environ.get("TEMP", r"C:\Windows\Temp"),
     "TMP": os.environ.get("TMP", r"C:\Windows\Temp"),
     "NUMBER_OF_PROCESSORS": os.environ.get("NUMBER_OF_PROCESSORS", "8"),
+    # Cap parallel build jobs. On the CI runner parallel cl.exe processes
+    # exhaust memory and the build gets killed mid-link with no error in the
+    # log (observed at opencc's marisa link step).
+    "CMAKE_BUILD_PARALLEL_LEVEL": os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL", "2"),
     "PROCESSOR_ARCHITECTURE": os.environ.get("PROCESSOR_ARCHITECTURE", "AMD64"),
     "BOOST_ROOT": BOOST_ROOT,
     "BOOST_LIBRARYDIR": os.environ.get("BOOST_LIBRARYDIR", os.path.join(BOOST_ROOT, "lib64-msvc-14.3")),
