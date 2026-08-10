@@ -92,10 +92,7 @@ def run_bat(label, script, cwd, log_path):
 env_bat = os.path.join(LIBRIME, "env.bat")
 env_bat_content = f'''set RIME_ROOT=%CD%
 if not defined BOOST_ROOT set BOOST_ROOT={BOOST_ROOT}
-set ARCH=x64
-set BJAM_TOOLSET=msvc-14.3
-set CMAKE_GENERATOR=Visual Studio 17 2022
-set PLATFORM_TOOLSET=v143
+set CMAKE_GENERATOR=Ninja
 '''
 with open(env_bat, "w", encoding="ascii", newline="\r\n") as f:
     f.write(env_bat_content)
@@ -117,20 +114,11 @@ else:
 log_deps = os.path.join(WEASEL, "_log_librime_deps.txt")
 deps_script = f'''@echo off
 call "{VCVARS}" x64
-set CMAKE_GENERATOR=Visual Studio 17 2022
-set CMAKE_GENERATOR_INSTANCE={VSINSTALL}
+set CMAKE_GENERATOR=Ninja
 cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
 set BOOST_LIBRARYDIR={BOOST_LIBDIR}
-echo ==== DIAG cmake ====
 cmake --version
-echo ==== DIAG vswhere ====
-"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-echo ==== DIAG env ====
-echo VSINSTALLDIR=%VSINSTALLDIR%
-echo VCINSTALLDIR=%VCINSTALLDIR%
-echo CMAKE_GENERATOR_INSTANCE=%CMAKE_GENERATOR_INSTANCE%
-echo ==== DIAG END ====
 call .\\build.bat deps
 '''
 rc = run_bat("librime deps", deps_script, LIBRIME, log_deps)
@@ -152,8 +140,7 @@ if rc != 0:
 log_rime = os.path.join(WEASEL, "_log_librime.txt")
 rime_script = f'''@echo off
 call "{VCVARS}" x64
-set CMAKE_GENERATOR=Visual Studio 17 2022
-set CMAKE_GENERATOR_INSTANCE={VSINSTALL}
+set CMAKE_GENERATOR=Ninja
 cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
 set BOOST_LIBRARYDIR={BOOST_LIBDIR}
