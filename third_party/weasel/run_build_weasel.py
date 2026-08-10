@@ -56,7 +56,7 @@ def _build_env():
     ]
     e["PATH"] = ";".join(prepend + keep)
     e["BOOST_ROOT"] = BOOST_ROOT
-    e["BOOST_LIBRARYDIR"] = os.path.join(BOOST_ROOT, "lib64-msvc-14.3")
+    e["BOOST_LIBRARYDIR"] = os.environ.get("BOOST_LIBRARYDIR", os.path.join(BOOST_ROOT, "lib64-msvc-14.3"))
     e["VSINSTALLDIR"] = VSINSTALLDIR
     e["VCINSTALLDIR"] = VCINSTALLDIR
     e["VisualStudioVersion"] = "17.0"

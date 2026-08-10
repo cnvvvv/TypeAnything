@@ -13,6 +13,7 @@ import sys
 WEASEL = os.path.dirname(os.path.abspath(__file__))
 LIBRIME = os.path.join(WEASEL, "librime")
 BOOST_ROOT = os.environ.get("BOOST_ROOT", r"C:\local\boost_1_84_0")
+BOOST_LIBDIR = os.environ.get("BOOST_LIBRARYDIR", os.path.join(BOOST_ROOT, "lib64-msvc-14.3"))
 
 # Auto-detect vcvarsall.bat via vswhere
 _vswhere = os.path.join(
@@ -37,6 +38,7 @@ else:
 
 print(f"WEASEL={WEASEL}")
 print(f"BOOST_ROOT={BOOST_ROOT}")
+print(f"BOOST_LIBRARYDIR={BOOST_LIBDIR}")
 print(f"VCVARS={VCVARS}")
 
 clean_env = {
@@ -57,7 +59,7 @@ clean_env = {
     "NUMBER_OF_PROCESSORS": os.environ.get("NUMBER_OF_PROCESSORS", "8"),
     "PROCESSOR_ARCHITECTURE": os.environ.get("PROCESSOR_ARCHITECTURE", "AMD64"),
     "BOOST_ROOT": BOOST_ROOT,
-    "BOOST_LIBRARYDIR": os.path.join(BOOST_ROOT, "lib64-msvc-14.3"),
+    "BOOST_LIBRARYDIR": os.environ.get("BOOST_LIBRARYDIR", os.path.join(BOOST_ROOT, "lib64-msvc-14.3")),
     "VSINSTALLDIR": VSINSTALLDIR,
     "VCINSTALLDIR": VCINSTALLDIR,
     "VisualStudioVersion": "17.0",
@@ -90,6 +92,7 @@ deps_script = f'''@echo off
 call "{VCVARS}" x64
 cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
+set BOOST_LIBRARYDIR={BOOST_LIBDIR}
 set CMAKE_GENERATOR=Visual Studio 17 2022
 set ARCH=x64
 set PLATFORM_TOOLSET=v143
@@ -106,6 +109,7 @@ rime_script = f'''@echo off
 call "{VCVARS}" x64
 cd /d "{LIBRIME}"
 set BOOST_ROOT={BOOST_ROOT}
+set BOOST_LIBRARYDIR={BOOST_LIBDIR}
 set CMAKE_GENERATOR=Visual Studio 17 2022
 set ARCH=x64
 set PLATFORM_TOOLSET=v143
